@@ -475,7 +475,7 @@ export const ReportSettingsView: React.FC<ReportSettingsViewProps> = ({
                   className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg"
                 >
                   <option value="A4">A4 (210 × 297 mm)</option>
-                  <option value="F4">F4 / Folio (215 × 330 mm)</option>
+                  <option value="F4">F4 / Folio (210 × 330 mm)</option>
                 </select>
               </div>
 

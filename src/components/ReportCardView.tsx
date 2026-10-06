@@ -142,21 +142,17 @@ export const ReportCardView: React.FC<ReportCardViewProps> = ({
       ? [activeStudent]
       : [];
 
-  // Paper dimensions in mm for preview container
+  // Paper dimensions in mm for preview container (F4 = 210 x 330 mm, A4 = 210 x 297 mm)
   const paperWidthMm =
     settings.orientation === 'Landscape'
       ? settings.paperSize === 'F4'
         ? 330
         : 297
-      : settings.paperSize === 'F4'
-      ? 215
       : 210;
 
   const paperMinHeightMm =
     settings.orientation === 'Landscape'
-      ? settings.paperSize === 'F4'
-        ? 215
-        : 210
+      ? 210
       : settings.paperSize === 'F4'
       ? 330
       : 297;

@@ -24,13 +24,148 @@ service cloud.firestore {
       return request.auth != null && request.auth.token.email_verified == true;
     }
 
+    function isBootstrappedAdmin() {
+      return isSignedIn() && request.auth.token.email == 'aprizamairizon12@gmail.com';
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == 'aprizamairizon12@gmail.com' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isApprovedStaff() {
+      return isSignedIn() && (
+        isAdmin() ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isActive == true)
+      );
+    }
+
     // 3. Entity Validation Blueprints
+    function isValidAdminRecord(data) {
+      return data.keys().hasAll(['uid', 'email', 'createdBy', 'createdAt'])
+        && data.keys().hasOnly(['uid', 'email', 'createdBy', 'createdAt'])
+        && data.uid is string && isValidId(data.uid)
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 120
+        && data.createdBy is string && isValidId(data.createdBy) && data.createdBy == request.auth.uid
+        && data.createdAt is timestamp;
+    }
+
+    function isValidUserAccount(data) {
+      return data.keys().hasAll([
+          'uid',
+          'email',
+          'name',
+          'nip',
+          'role',
+          'homeroomClass',
+          'assignedSubjectIds',
+          'assignedClasses',
+          'isActive',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'uid',
+          'email',
+          'name',
+          'nip',
+          'role',
+          'homeroomClass',
+          'assignedSubjectIds',
+          'assignedClasses',
+          'isActive',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.uid is string && isValidId(data.uid)
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 120
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 120
+        && data.nip is string && data.nip.size() >= 0 && data.nip.size() <= 50
+        && data.role is string && data.role.size() >= 5 && data.role.size() <= 20
+        && (
+          data.role == 'admin' ||
+          data.role == 'teacher' ||
+          data.role == 'homeroom' ||
+          data.role == 'guru_mapel' ||
+          data.role == 'wali_kelas'
+        )
+        && data.homeroomClass is string && data.homeroomClass.size() >= 0 && data.homeroomClass.size() <= 50
+        && data.assignedSubjectIds is string && data.assignedSubjectIds.size() >= 0 && data.assignedSubjectIds.size() <= 500
+        && data.assignedClasses is string && data.assignedClasses.size() >= 0 && data.assignedClasses.size() <= 300
+        && data.isActive is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidTeacherAssignment(data) {
+      return data.keys().hasAll([
+          'teacherUid',
+          'teacherName',
+          'subjectId',
+          'className',
+          'academicYear',
+          'semester',
+          'ownerId',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'teacherUid',
+          'teacherName',
+          'subjectId',
+          'className',
+          'academicYear',
+          'semester',
+          'ownerId',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.teacherUid is string && isValidId(data.teacherUid)
+        && data.teacherName is string && data.teacherName.size() >= 1 && data.teacherName.size() <= 120
+        && data.subjectId is string && isValidId(data.subjectId)
+        && data.className is string && data.className.size() >= 1 && data.className.size() <= 50
+        && data.academicYear is string && data.academicYear.size() >= 1 && data.academicYear.size() <= 30
+        && data.semester is string && data.semester.size() >= 1 && data.semester.size() <= 20 && (data.semester == 'Ganjil' || data.semester == 'Genap')
+        && data.ownerId is string && isValidId(data.ownerId) && data.ownerId == request.auth.uid
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAcademicYear(data) {
+      return data.keys().hasAll([
+          'year',
+          'semester',
+          'isActive',
+          'ownerId',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'year',
+          'semester',
+          'isActive',
+          'ownerId',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.year is string && data.year.size() >= 4 && data.year.size() <= 30
+        && data.semester is string && data.semester.size() >= 5 && data.semester.size() <= 20 && (data.semester == 'Ganjil' || data.semester == 'Genap')
+        && data.isActive is bool
+        && data.ownerId is string && isValidId(data.ownerId) && data.ownerId == request.auth.uid
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
     function isValidSchoolClass(data) {
       return data.keys().hasAll([
           'name',
           'homeroomTeacherName',
           'homeroomTeacherNip',
           'homeroomTeacherRole',
+          'homeroomUid',
           'ownerId',
           'createdAt',
           'updatedAt'
@@ -40,6 +175,7 @@ service cloud.firestore {
           'homeroomTeacherName',
           'homeroomTeacherNip',
           'homeroomTeacherRole',
+          'homeroomUid',
           'ownerId',
           'createdAt',
           'updatedAt'
@@ -48,7 +184,8 @@ service cloud.firestore {
         && data.homeroomTeacherName is string && data.homeroomTeacherName.size() >= 1 && data.homeroomTeacherName.size() <= 120
         && data.homeroomTeacherNip is string && data.homeroomTeacherNip.size() >= 0 && data.homeroomTeacherNip.size() <= 50
         && data.homeroomTeacherRole is string && data.homeroomTeacherRole.size() >= 1 && data.homeroomTeacherRole.size() <= 80
-        && data.ownerId is string && isValidId(data.ownerId) && data.ownerId == request.auth.uid
+        && data.homeroomUid is string && isValidId(data.homeroomUid)
+        && data.ownerId is string && isValidId(data.ownerId)
         && data.createdAt is timestamp
         && data.updatedAt is timestamp;
     }
@@ -65,6 +202,7 @@ service cloud.firestore {
           'behaviorPredicate',
           'behaviorNote',
           'homeroomNote',
+          'homeroomUid',
           'ownerId',
           'createdAt',
           'updatedAt'
@@ -80,6 +218,7 @@ service cloud.firestore {
           'behaviorPredicate',
           'behaviorNote',
           'homeroomNote',
+          'homeroomUid',
           'ownerId',
           'createdAt',
           'updatedAt'
@@ -95,7 +234,8 @@ service cloud.firestore {
         && (data.behaviorPredicate == 'Sangat Baik' || data.behaviorPredicate == 'Baik' || data.behaviorPredicate == 'Cukup' || data.behaviorPredicate == 'Perlu Pembinaan')
         && data.behaviorNote is string && data.behaviorNote.size() >= 0 && data.behaviorNote.size() <= 500
         && data.homeroomNote is string && data.homeroomNote.size() >= 0 && data.homeroomNote.size() <= 500
-        && data.ownerId is string && isValidId(data.ownerId) && data.ownerId == request.auth.uid
+        && data.homeroomUid is string && isValidId(data.homeroomUid)
+        && data.ownerId is string && isValidId(data.ownerId)
         && data.createdAt is timestamp
         && data.updatedAt is timestamp;
     }
@@ -106,6 +246,7 @@ service cloud.firestore {
           'name',
           'className',
           'teacherName',
+          'teacherUid',
           'isVisible',
           'learningOutcome',
           'ownerId',
@@ -117,6 +258,7 @@ service cloud.firestore {
           'name',
           'className',
           'teacherName',
+          'teacherUid',
           'isVisible',
           'learningOutcome',
           'ownerId',
@@ -127,9 +269,10 @@ service cloud.firestore {
         && data.name is string && data.name.size() >= 1 && data.name.size() <= 120
         && data.className is string && data.className.size() >= 1 && data.className.size() <= 100
         && data.teacherName is string && data.teacherName.size() >= 1 && data.teacherName.size() <= 120
+        && data.teacherUid is string && isValidId(data.teacherUid)
         && data.isVisible is bool
         && data.learningOutcome is string && data.learningOutcome.size() >= 0 && data.learningOutcome.size() <= 1000
-        && data.ownerId is string && isValidId(data.ownerId) && data.ownerId == request.auth.uid
+        && data.ownerId is string && isValidId(data.ownerId)
         && data.createdAt is timestamp
         && data.updatedAt is timestamp;
     }
@@ -138,11 +281,13 @@ service cloud.firestore {
       return data.keys().hasAll([
           'studentId',
           'subjectId',
+          'assignmentId',
           'className',
           'semester',
           'academicYear',
           'astsScore',
           'updatedByTeacher',
+          'teacherUid',
           'ownerId',
           'createdAt',
           'updatedAt'
@@ -150,23 +295,108 @@ service cloud.firestore {
         && data.keys().hasOnly([
           'studentId',
           'subjectId',
+          'assignmentId',
           'className',
           'semester',
           'academicYear',
           'astsScore',
           'updatedByTeacher',
+          'teacherUid',
           'ownerId',
           'createdAt',
           'updatedAt'
         ])
         && data.studentId is string && isValidId(data.studentId)
         && data.subjectId is string && isValidId(data.subjectId)
+        && data.assignmentId is string && isValidId(data.assignmentId)
         && data.className is string && data.className.size() >= 1 && data.className.size() <= 50
         && data.semester is string && data.semester.size() >= 1 && data.semester.size() <= 20 && (data.semester == 'Ganjil' || data.semester == 'Genap')
         && data.academicYear is string && data.academicYear.size() >= 1 && data.academicYear.size() <= 30
         && (data.astsScore is int || data.astsScore is float) && data.astsScore >= 0 && data.astsScore <= 100
         && data.updatedByTeacher is string && data.updatedByTeacher.size() >= 1 && data.updatedByTeacher.size() <= 120
-        && data.ownerId is string && isValidId(data.ownerId) && data.ownerId == request.auth.uid
+        && data.teacherUid is string && isValidId(data.teacherUid)
+        && data.ownerId is string && isValidId(data.ownerId)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAttendanceRecord(data) {
+      return data.keys().hasAll([
+          'studentId',
+          'className',
+          'academicYear',
+          'semester',
+          'sakit',
+          'izin',
+          'alpa',
+          'homeroomUid',
+          'ownerId',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'studentId',
+          'className',
+          'academicYear',
+          'semester',
+          'sakit',
+          'izin',
+          'alpa',
+          'homeroomUid',
+          'ownerId',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.studentId is string && isValidId(data.studentId)
+        && data.className is string && data.className.size() >= 1 && data.className.size() <= 50
+        && data.academicYear is string && data.academicYear.size() >= 1 && data.academicYear.size() <= 30
+        && data.semester is string && data.semester.size() >= 1 && data.semester.size() <= 20 && (data.semester == 'Ganjil' || data.semester == 'Genap')
+        && data.sakit is int && data.sakit >= 0 && data.sakit <= 365
+        && data.izin is int && data.izin >= 0 && data.izin <= 365
+        && data.alpa is int && data.alpa >= 0 && data.alpa <= 365
+        && data.homeroomUid is string && isValidId(data.homeroomUid)
+        && data.ownerId is string && isValidId(data.ownerId)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidReportNoteRecord(data) {
+      return data.keys().hasAll([
+          'studentId',
+          'className',
+          'academicYear',
+          'semester',
+          'behaviorPredicate',
+          'behaviorNote',
+          'homeroomNote',
+          'homeroomUid',
+          'ownerId',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'studentId',
+          'className',
+          'academicYear',
+          'semester',
+          'behaviorPredicate',
+          'behaviorNote',
+          'homeroomNote',
+          'homeroomUid',
+          'ownerId',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.studentId is string && isValidId(data.studentId)
+        && data.className is string && data.className.size() >= 1 && data.className.size() <= 50
+        && data.academicYear is string && data.academicYear.size() >= 1 && data.academicYear.size() <= 30
+        && data.semester is string && data.semester.size() >= 1 && data.semester.size() <= 20 && (data.semester == 'Ganjil' || data.semester == 'Genap')
+        && data.behaviorPredicate is string && data.behaviorPredicate.size() >= 1 && data.behaviorPredicate.size() <= 30
+        && (data.behaviorPredicate == 'Sangat Baik' || data.behaviorPredicate == 'Baik' || data.behaviorPredicate == 'Cukup' || data.behaviorPredicate == 'Perlu Pembinaan')
+        && data.behaviorNote is string && data.behaviorNote.size() >= 0 && data.behaviorNote.size() <= 500
+        && data.homeroomNote is string && data.homeroomNote.size() >= 0 && data.homeroomNote.size() <= 500
+        && data.homeroomUid is string && isValidId(data.homeroomUid)
+        && data.ownerId is string && isValidId(data.ownerId)
         && data.createdAt is timestamp
         && data.updatedAt is timestamp;
     }
@@ -254,24 +484,128 @@ service cloud.firestore {
         && data.showHomeroomNote is bool
         && data.showSignatures is bool
         && data.showRanking is bool
-        && data.ownerId is string && isValidId(data.ownerId) && data.ownerId == request.auth.uid
+        && data.ownerId is string && isValidId(data.ownerId)
         && data.createdAt is timestamp
         && data.updatedAt is timestamp;
     }
 
-    // 4. Collection Rules
+    // 4. Collection Rules (Centralized School Database + Zero-Trust RBAC)
+    match /admins/{adminId} {
+      allow get: if isSignedIn() && isValidId(adminId) && (adminId == request.auth.uid || isAdmin());
+      allow list: if isBootstrappedAdmin() && resource.data.createdBy == request.auth.uid;
+      allow create: if isValidId(adminId)
+        && isValidAdminRecord(incoming())
+        && incoming().uid == adminId
+        && incoming().createdAt == request.time
+        && isAdmin();
+      allow update: if false;
+      allow delete: if isValidId(adminId) && isAdmin();
+    }
+
+    match /users/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && (userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.uid == request.auth.uid || isBootstrappedAdmin());
+      allow create: if isSignedIn()
+        && isValidId(userId)
+        && isValidUserAccount(incoming())
+        && incoming().uid == userId
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() ||
+          (userId == request.auth.uid && (incoming().role == 'teacher' || incoming().role == 'guru_mapel') && incoming().isActive == false)
+        );
+      allow update: if isSignedIn()
+        && isValidId(userId)
+        && isValidUserAccount(incoming())
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly([
+            'name',
+            'nip',
+            'role',
+            'homeroomClass',
+            'assignedSubjectIds',
+            'assignedClasses',
+            'isActive',
+            'updatedAt'
+          ])) ||
+          (userId == request.auth.uid
+            && incoming().role == existing().role
+            && incoming().isActive == existing().isActive
+            && incoming().homeroomClass == existing().homeroomClass
+            && incoming().assignedSubjectIds == existing().assignedSubjectIds
+            && incoming().assignedClasses == existing().assignedClasses
+            && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'nip', 'updatedAt']))
+        );
+      allow delete: if isSignedIn() && isValidId(userId) && isAdmin();
+    }
+
+    match /teacherAssignments/{assignmentId} {
+      allow get: if isSignedIn() && isValidId(assignmentId) && (existing().teacherUid == request.auth.uid || existing().ownerId == request.auth.uid || isApprovedStaff());
+      allow list: if isSignedIn() && (resource.data.teacherUid == request.auth.uid || resource.data.ownerId == request.auth.uid || isBootstrappedAdmin());
+      allow create: if isSignedIn()
+        && isValidId(assignmentId)
+        && isValidTeacherAssignment(incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && isAdmin()
+        && exists(/databases/$(database)/documents/subjects/$(incoming().subjectId));
+      allow update: if isSignedIn()
+        && isValidId(assignmentId)
+        && isValidTeacherAssignment(incoming())
+        && incoming().ownerId == existing().ownerId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'teacherUid',
+          'teacherName',
+          'subjectId',
+          'className',
+          'academicYear',
+          'semester',
+          'updatedAt'
+        ])
+        && isAdmin()
+        && exists(/databases/$(database)/documents/subjects/$(incoming().subjectId));
+      allow delete: if isSignedIn() && isValidId(assignmentId) && isAdmin();
+    }
+
+    match /academicYears/{yearId} {
+      allow get: if isSignedIn() && isValidId(yearId) && (existing().ownerId == request.auth.uid || isApprovedStaff());
+      allow list: if isSignedIn() && (resource.data.ownerId == request.auth.uid || isBootstrappedAdmin());
+      allow create: if isSignedIn()
+        && isValidId(yearId)
+        && isValidAcademicYear(incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && isAdmin();
+      allow update: if isSignedIn()
+        && isValidId(yearId)
+        && isValidAcademicYear(incoming())
+        && incoming().ownerId == existing().ownerId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['year', 'semester', 'isActive', 'updatedAt'])
+        && isAdmin();
+      allow delete: if isSignedIn() && isValidId(yearId) && isAdmin();
+    }
+
     match /classes/{classId} {
-      allow get: if isSignedIn() && isValidId(classId) && existing().ownerId == request.auth.uid;
-      allow list: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+      allow get: if isSignedIn() && isValidId(classId) && (existing().homeroomUid == request.auth.uid || existing().ownerId == request.auth.uid || isApprovedStaff());
+      allow list: if isSignedIn() && (resource.data.homeroomUid == request.auth.uid || resource.data.ownerId == request.auth.uid || isBootstrappedAdmin());
       allow create: if isSignedIn()
         && isValidId(classId)
         && isValidSchoolClass(incoming())
+        && incoming().ownerId == request.auth.uid
         && incoming().createdAt == request.time
-        && incoming().updatedAt == request.time;
+        && incoming().updatedAt == request.time
+        && isAdmin();
       allow update: if isSignedIn()
         && isValidId(classId)
         && isValidSchoolClass(incoming())
-        && existing().ownerId == request.auth.uid
         && incoming().ownerId == existing().ownerId
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
@@ -280,37 +614,31 @@ service cloud.firestore {
           'homeroomTeacherName',
           'homeroomTeacherNip',
           'homeroomTeacherRole',
+          'homeroomUid',
           'updatedAt'
-        ]);
-      allow delete: if isSignedIn() && isValidId(classId) && existing().ownerId == request.auth.uid;
+        ])
+        && isAdmin();
+      allow delete: if isSignedIn() && isValidId(classId) && isAdmin();
     }
 
     match /students/{studentId} {
-      allow get: if isSignedIn() && isValidId(studentId) && existing().ownerId == request.auth.uid;
-      allow list: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+      allow get: if isSignedIn() && isValidId(studentId) && (existing().homeroomUid == request.auth.uid || existing().ownerId == request.auth.uid || isApprovedStaff());
+      allow list: if isSignedIn() && (resource.data.homeroomUid == request.auth.uid || resource.data.ownerId == request.auth.uid || isBootstrappedAdmin());
       allow create: if isSignedIn()
         && isValidId(studentId)
         && isValidStudent(incoming())
+        && incoming().ownerId == request.auth.uid
         && incoming().createdAt == request.time
-        && incoming().updatedAt == request.time;
+        && incoming().updatedAt == request.time
+        && isAdmin();
       allow update: if isSignedIn()
         && isValidId(studentId)
         && isValidStudent(incoming())
-        && existing().ownerId == request.auth.uid
         && incoming().ownerId == existing().ownerId
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
         && (
-          // Action: Update Student Profile
-          incoming().diff(existing()).affectedKeys().hasOnly(['nisn', 'name', 'gender', 'className', 'updatedAt']) ||
-          // Action: Update Attendance
-          incoming().diff(existing()).affectedKeys().hasOnly(['sakit', 'izin', 'alpa', 'updatedAt']) ||
-          // Action: Update Behavior
-          incoming().diff(existing()).affectedKeys().hasOnly(['behaviorPredicate', 'behaviorNote', 'updatedAt']) ||
-          // Action: Update Homeroom Note
-          incoming().diff(existing()).affectedKeys().hasOnly(['homeroomNote', 'updatedAt']) ||
-          // Action: Full Student Record Sync
-          incoming().diff(existing()).affectedKeys().hasOnly([
+          (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly([
             'nisn',
             'name',
             'gender',
@@ -321,65 +649,99 @@ service cloud.firestore {
             'behaviorPredicate',
             'behaviorNote',
             'homeroomNote',
+            'homeroomUid',
             'updatedAt'
-          ])
+          ])) ||
+          (existing().homeroomUid == request.auth.uid
+            && incoming().homeroomUid == existing().homeroomUid
+            && incoming().nisn == existing().nisn
+            && incoming().name == existing().name
+            && incoming().gender == existing().gender
+            && incoming().className == existing().className
+            && (
+              incoming().diff(existing()).affectedKeys().hasOnly(['sakit', 'izin', 'alpa', 'updatedAt']) ||
+              incoming().diff(existing()).affectedKeys().hasOnly(['behaviorPredicate', 'behaviorNote', 'updatedAt']) ||
+              incoming().diff(existing()).affectedKeys().hasOnly(['homeroomNote', 'updatedAt']) ||
+              incoming().diff(existing()).affectedKeys().hasOnly([
+                'sakit',
+                'izin',
+                'alpa',
+                'behaviorPredicate',
+                'behaviorNote',
+                'homeroomNote',
+                'updatedAt'
+              ])
+            ))
         );
-      allow delete: if isSignedIn() && isValidId(studentId) && existing().ownerId == request.auth.uid;
+      allow delete: if isSignedIn() && isValidId(studentId) && isAdmin();
     }
 
     match /subjects/{subjectId} {
-      allow get: if isSignedIn() && isValidId(subjectId) && existing().ownerId == request.auth.uid;
-      allow list: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+      allow get: if isSignedIn() && isValidId(subjectId) && (existing().teacherUid == request.auth.uid || existing().ownerId == request.auth.uid || isApprovedStaff());
+      allow list: if isSignedIn() && (resource.data.teacherUid == request.auth.uid || resource.data.ownerId == request.auth.uid || isBootstrappedAdmin());
       allow create: if isSignedIn()
         && isValidId(subjectId)
         && isValidSubject(incoming())
+        && incoming().ownerId == request.auth.uid
         && incoming().createdAt == request.time
-        && incoming().updatedAt == request.time;
+        && incoming().updatedAt == request.time
+        && isAdmin();
       allow update: if isSignedIn()
         && isValidId(subjectId)
         && isValidSubject(incoming())
-        && existing().ownerId == request.auth.uid
         && incoming().ownerId == existing().ownerId
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
         && (
-          // Action: Toggle Subject Visibility
-          incoming().diff(existing()).affectedKeys().hasOnly(['isVisible', 'updatedAt']) ||
-          // Action: Update Capaian Pembelajaran (CP)
-          incoming().diff(existing()).affectedKeys().hasOnly(['learningOutcome', 'updatedAt']) ||
-          // Action: Update Subject Metadata
-          incoming().diff(existing()).affectedKeys().hasOnly([
+          (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly([
             'code',
             'name',
             'className',
             'teacherName',
+            'teacherUid',
             'isVisible',
             'learningOutcome',
             'updatedAt'
-          ])
+          ])) ||
+          (existing().teacherUid == request.auth.uid
+            && incoming().teacherUid == existing().teacherUid
+            && incoming().code == existing().code
+            && incoming().name == existing().name
+            && incoming().className == existing().className
+            && incoming().teacherName == existing().teacherName
+            && incoming().isVisible == existing().isVisible
+            && incoming().diff(existing()).affectedKeys().hasOnly(['learningOutcome', 'updatedAt']))
         );
-      allow delete: if isSignedIn() && isValidId(subjectId) && existing().ownerId == request.auth.uid;
+      allow delete: if isSignedIn() && isValidId(subjectId) && isAdmin();
     }
 
     match /grades/{gradeId} {
-      allow get: if isSignedIn() && isValidId(gradeId) && existing().ownerId == request.auth.uid;
-      allow list: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+      allow get: if isSignedIn() && isValidId(gradeId) && (existing().teacherUid == request.auth.uid || existing().ownerId == request.auth.uid || isApprovedStaff());
+      allow list: if isSignedIn() && (resource.data.teacherUid == request.auth.uid || resource.data.ownerId == request.auth.uid || isBootstrappedAdmin());
       allow create: if isSignedIn()
         && isValidId(gradeId)
         && isValidGradeRecord(incoming())
+        && incoming().ownerId == request.auth.uid
         && incoming().createdAt == request.time
         && incoming().updatedAt == request.time
         && exists(/databases/$(database)/documents/students/$(incoming().studentId))
-        && get(/databases/$(database)/documents/students/$(incoming().studentId)).data.ownerId == request.auth.uid
         && exists(/databases/$(database)/documents/subjects/$(incoming().subjectId))
-        && get(/databases/$(database)/documents/subjects/$(incoming().subjectId)).data.ownerId == request.auth.uid;
+        && (
+          isAdmin() ||
+          (incoming().teacherUid == request.auth.uid
+            && exists(/databases/$(database)/documents/teacherAssignments/$(incoming().assignmentId))
+            && get(/databases/$(database)/documents/teacherAssignments/$(incoming().assignmentId)).data.teacherUid == request.auth.uid
+            && get(/databases/$(database)/documents/teacherAssignments/$(incoming().assignmentId)).data.subjectId == incoming().subjectId
+            && get(/databases/$(database)/documents/teacherAssignments/$(incoming().assignmentId)).data.className == incoming().className)
+        );
       allow update: if isSignedIn()
         && isValidId(gradeId)
         && isValidGradeRecord(incoming())
-        && existing().ownerId == request.auth.uid
         && incoming().ownerId == existing().ownerId
         && incoming().studentId == existing().studentId
         && incoming().subjectId == existing().subjectId
+        && incoming().assignmentId == existing().assignmentId
+        && incoming().teacherUid == existing().teacherUid
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
         && incoming().diff(existing()).affectedKeys().hasOnly([
@@ -391,24 +753,78 @@ service cloud.firestore {
           'updatedAt'
         ])
         && exists(/databases/$(database)/documents/students/$(incoming().studentId))
-        && get(/databases/$(database)/documents/students/$(incoming().studentId)).data.ownerId == request.auth.uid
         && exists(/databases/$(database)/documents/subjects/$(incoming().subjectId))
-        && get(/databases/$(database)/documents/subjects/$(incoming().subjectId)).data.ownerId == request.auth.uid;
-      allow delete: if isSignedIn() && isValidId(gradeId) && existing().ownerId == request.auth.uid;
+        && (
+          isAdmin() ||
+          (existing().teacherUid == request.auth.uid
+            && exists(/databases/$(database)/documents/teacherAssignments/$(incoming().assignmentId))
+            && get(/databases/$(database)/documents/teacherAssignments/$(incoming().assignmentId)).data.teacherUid == request.auth.uid
+            && get(/databases/$(database)/documents/teacherAssignments/$(incoming().assignmentId)).data.subjectId == incoming().subjectId)
+        );
+      allow delete: if isSignedIn() && isValidId(gradeId) && isAdmin();
+    }
+
+    match /attendance/{attendanceId} {
+      allow get: if isSignedIn() && isValidId(attendanceId) && (existing().homeroomUid == request.auth.uid || existing().ownerId == request.auth.uid || isApprovedStaff());
+      allow list: if isSignedIn() && (resource.data.homeroomUid == request.auth.uid || resource.data.ownerId == request.auth.uid || isBootstrappedAdmin());
+      allow create: if isSignedIn()
+        && isValidId(attendanceId)
+        && isValidAttendanceRecord(incoming())
+        && incoming().ownerId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && exists(/databases/$(database)/documents/students/$(incoming().studentId))
+        && (isAdmin() || incoming().homeroomUid == request.auth.uid);
+      allow update: if isSignedIn()
+        && isValidId(attendanceId)
+        && isValidAttendanceRecord(incoming())
+        && incoming().ownerId == existing().ownerId
+        && incoming().studentId == existing().studentId
+        && incoming().homeroomUid == existing().homeroomUid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['sakit', 'izin', 'alpa', 'updatedAt'])
+        && (isAdmin() || existing().homeroomUid == request.auth.uid);
+      allow delete: if isSignedIn() && isValidId(attendanceId) && isAdmin();
+    }
+
+    match /reportNotes/{noteId} {
+      allow get: if isSignedIn() && isValidId(noteId) && (existing().homeroomUid == request.auth.uid || existing().ownerId == request.auth.uid || isApprovedStaff());
+      allow list: if isSignedIn() && (resource.data.homeroomUid == request.auth.uid || resource.data.ownerId == request.auth.uid || isBootstrappedAdmin());
+      allow create: if isSignedIn()
+        && isValidId(noteId)
+        && isValidReportNoteRecord(incoming())
+        && incoming().ownerId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && exists(/databases/$(database)/documents/students/$(incoming().studentId))
+        && (isAdmin() || incoming().homeroomUid == request.auth.uid);
+      allow update: if isSignedIn()
+        && isValidId(noteId)
+        && isValidReportNoteRecord(incoming())
+        && incoming().ownerId == existing().ownerId
+        && incoming().studentId == existing().studentId
+        && incoming().homeroomUid == existing().homeroomUid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['behaviorPredicate', 'behaviorNote', 'homeroomNote', 'updatedAt'])
+        && (isAdmin() || existing().homeroomUid == request.auth.uid);
+      allow delete: if isSignedIn() && isValidId(noteId) && isAdmin();
     }
 
     match /settings/{settingId} {
-      allow get: if isSignedIn() && isValidId(settingId) && existing().ownerId == request.auth.uid;
-      allow list: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+      allow get: if isSignedIn() && isValidId(settingId) && (existing().ownerId == request.auth.uid || isApprovedStaff());
+      allow list: if isSignedIn() && (resource.data.ownerId == request.auth.uid || isBootstrappedAdmin());
       allow create: if isSignedIn()
         && isValidId(settingId)
         && isValidSchoolSetting(incoming())
+        && incoming().ownerId == request.auth.uid
         && incoming().createdAt == request.time
-        && incoming().updatedAt == request.time;
+        && incoming().updatedAt == request.time
+        && isAdmin();
       allow update: if isSignedIn()
         && isValidId(settingId)
         && isValidSchoolSetting(incoming())
-        && existing().ownerId == request.auth.uid
         && incoming().ownerId == existing().ownerId
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
@@ -438,8 +854,56 @@ service cloud.firestore {
           'showSignatures',
           'showRanking',
           'updatedAt'
-        ]);
-      allow delete: if isSignedIn() && isValidId(settingId) && existing().ownerId == request.auth.uid;
+        ])
+        && isAdmin();
+      allow delete: if isSignedIn() && isValidId(settingId) && isAdmin();
+    }
+
+    match /schoolSettings/{settingId} {
+      allow get: if isSignedIn() && isValidId(settingId) && (existing().ownerId == request.auth.uid || isApprovedStaff());
+      allow list: if isSignedIn() && (resource.data.ownerId == request.auth.uid || isBootstrappedAdmin());
+      allow create: if isSignedIn()
+        && isValidId(settingId)
+        && isValidSchoolSetting(incoming())
+        && incoming().ownerId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && isAdmin();
+      allow update: if isSignedIn()
+        && isValidId(settingId)
+        && isValidSchoolSetting(incoming())
+        && incoming().ownerId == existing().ownerId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'schoolName',
+          'npsn',
+          'address',
+          'phone',
+          'email',
+          'website',
+          'principalName',
+          'principalNip',
+          'academicYear',
+          'semester',
+          'paperSize',
+          'orientation',
+          'fontFamily',
+          'fontSize',
+          'themeColor',
+          'marginMm',
+          'showLogo',
+          'showCp',
+          'showGrades',
+          'showAttendance',
+          'showBehavior',
+          'showHomeroomNote',
+          'showSignatures',
+          'showRanking',
+          'updatedAt'
+        ])
+        && isAdmin();
+      allow delete: if isSignedIn() && isValidId(settingId) && isAdmin();
     }
   }
 }

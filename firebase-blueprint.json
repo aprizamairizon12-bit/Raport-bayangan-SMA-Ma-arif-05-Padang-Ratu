@@ -1,5 +1,238 @@
 {
   "entities": {
+    "AdminRecord": {
+      "title": "AdminRecord",
+      "description": "Trusted admin registry document keyed by user UID.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID of the administrator",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "description": "Verified email of the administrator",
+          "minLength": 3,
+          "maxLength": 120
+        },
+        "createdBy": {
+          "type": "string",
+          "description": "UID of the admin who granted access",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation server timestamp"
+        }
+      },
+      "required": ["uid", "email", "createdBy", "createdAt"]
+    },
+    "UserAccount": {
+      "title": "UserAccount",
+      "description": "Represents a school staff/teacher user profile and role assignment.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Unique user identifier",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "description": "User email address",
+          "minLength": 3,
+          "maxLength": 120
+        },
+        "name": {
+          "type": "string",
+          "description": "Full name and academic title of the teacher/admin",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "nip": {
+          "type": "string",
+          "description": "NIP or NUPTK of the teacher",
+          "minLength": 0,
+          "maxLength": 50
+        },
+        "role": {
+          "type": "string",
+          "description": "Primary system role",
+          "enum": ["admin", "teacher", "homeroom", "guru_mapel", "wali_kelas"],
+          "minLength": 5,
+          "maxLength": 20
+        },
+        "homeroomClass": {
+          "type": "string",
+          "description": "Assigned class name if user is a Wali Kelas (or empty string)",
+          "minLength": 0,
+          "maxLength": 50
+        },
+        "assignedSubjectIds": {
+          "type": "string",
+          "description": "Comma-separated subject IDs assigned to this teacher",
+          "minLength": 0,
+          "maxLength": 500
+        },
+        "assignedClasses": {
+          "type": "string",
+          "description": "Comma-separated class names assigned to this teacher",
+          "minLength": 0,
+          "maxLength": 300
+        },
+        "isActive": {
+          "type": "boolean",
+          "description": "Whether the teacher account is active and approved"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation server timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last update server timestamp"
+        }
+      },
+      "required": [
+        "uid",
+        "email",
+        "name",
+        "nip",
+        "role",
+        "homeroomClass",
+        "assignedSubjectIds",
+        "assignedClasses",
+        "isActive",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "TeacherAssignment": {
+      "title": "TeacherAssignment",
+      "description": "Maps a teacher UID to a specific subject and class for a given academic year.",
+      "type": "object",
+      "properties": {
+        "teacherUid": {
+          "type": "string",
+          "description": "UID of the assigned subject teacher",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "teacherName": {
+          "type": "string",
+          "description": "Name of the assigned teacher",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "subjectId": {
+          "type": "string",
+          "description": "Assigned Subject document ID",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "className": {
+          "type": "string",
+          "description": "Assigned Class name (e.g. X 1)",
+          "minLength": 1,
+          "maxLength": 50
+        },
+        "academicYear": {
+          "type": "string",
+          "description": "Academic year (e.g. 2026/2027)",
+          "minLength": 1,
+          "maxLength": 30
+        },
+        "semester": {
+          "type": "string",
+          "description": "Semester (Ganjil or Genap)",
+          "enum": ["Ganjil", "Genap"],
+          "minLength": 1,
+          "maxLength": 20
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "UID of the admin who created this assignment",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation server timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last update server timestamp"
+        }
+      },
+      "required": [
+        "teacherUid",
+        "teacherName",
+        "subjectId",
+        "className",
+        "academicYear",
+        "semester",
+        "ownerId",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "AcademicYear": {
+      "title": "AcademicYear",
+      "description": "Represents an academic year and semester configuration.",
+      "type": "object",
+      "properties": {
+        "year": {
+          "type": "string",
+          "description": "Academic year label (e.g. 2026/2027)",
+          "minLength": 4,
+          "maxLength": 30
+        },
+        "semester": {
+          "type": "string",
+          "description": "Semester (Ganjil or Genap)",
+          "enum": ["Ganjil", "Genap"],
+          "minLength": 5,
+          "maxLength": 20
+        },
+        "isActive": {
+          "type": "boolean",
+          "description": "Whether this is the currently active academic period"
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "UID of the admin who created this period",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation server timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last update server timestamp"
+        }
+      },
+      "required": ["year", "semester", "isActive", "ownerId", "createdAt", "updatedAt"]
+    },
     "SchoolClass": {
       "title": "SchoolClass",
       "description": "Represents a class and its assigned homeroom teacher (Wali Kelas) at SMA Ma'arif 05 Padang Ratu.",
@@ -29,9 +262,16 @@
           "minLength": 1,
           "maxLength": 80
         },
+        "homeroomUid": {
+          "type": "string",
+          "description": "UID of the assigned homeroom teacher user",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
         "ownerId": {
           "type": "string",
-          "description": "UID of the authenticated user who owns this record",
+          "description": "UID of the creator/admin",
           "minLength": 1,
           "maxLength": 128,
           "pattern": "^[a-zA-Z0-9_\\-]+$"
@@ -52,6 +292,7 @@
         "homeroomTeacherName",
         "homeroomTeacherNip",
         "homeroomTeacherRole",
+        "homeroomUid",
         "ownerId",
         "createdAt",
         "updatedAt"
@@ -118,9 +359,16 @@
           "minLength": 0,
           "maxLength": 500
         },
+        "homeroomUid": {
+          "type": "string",
+          "description": "UID of the homeroom teacher responsible for this student's class",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
         "ownerId": {
           "type": "string",
-          "description": "UID of the authenticated user who owns this record",
+          "description": "UID of the admin who created this record",
           "minLength": 1,
           "maxLength": 128,
           "pattern": "^[a-zA-Z0-9_\\-]+$"
@@ -147,6 +395,7 @@
         "behaviorPredicate",
         "behaviorNote",
         "homeroomNote",
+        "homeroomUid",
         "ownerId",
         "createdAt",
         "updatedAt"
@@ -181,6 +430,13 @@
           "minLength": 1,
           "maxLength": 120
         },
+        "teacherUid": {
+          "type": "string",
+          "description": "UID of the assigned subject teacher",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
         "isVisible": {
           "type": "boolean",
           "description": "Whether the subject is displayed on the report card and leger"
@@ -193,7 +449,7 @@
         },
         "ownerId": {
           "type": "string",
-          "description": "UID of the authenticated user who owns this record",
+          "description": "UID of the admin/creator",
           "minLength": 1,
           "maxLength": 128,
           "pattern": "^[a-zA-Z0-9_\\-]+$"
@@ -214,6 +470,7 @@
         "name",
         "className",
         "teacherName",
+        "teacherUid",
         "isVisible",
         "learningOutcome",
         "ownerId",
@@ -236,6 +493,13 @@
         "subjectId": {
           "type": "string",
           "description": "Referenced Subject document ID",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "assignmentId": {
+          "type": "string",
+          "description": "Referenced TeacherAssignment document ID",
           "minLength": 1,
           "maxLength": 128,
           "pattern": "^[a-zA-Z0-9_\\-]+$"
@@ -269,9 +533,16 @@
           "minLength": 1,
           "maxLength": 120
         },
+        "teacherUid": {
+          "type": "string",
+          "description": "UID of the subject teacher who owns this grade entry",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
         "ownerId": {
           "type": "string",
-          "description": "UID of the authenticated user who owns this record",
+          "description": "UID of the creator",
           "minLength": 1,
           "maxLength": 128,
           "pattern": "^[a-zA-Z0-9_\\-]+$"
@@ -290,11 +561,184 @@
       "required": [
         "studentId",
         "subjectId",
+        "assignmentId",
         "className",
         "semester",
         "academicYear",
         "astsScore",
         "updatedByTeacher",
+        "teacherUid",
+        "ownerId",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "AttendanceRecord": {
+      "title": "AttendanceRecord",
+      "description": "Represents student attendance summary for a semester.",
+      "type": "object",
+      "properties": {
+        "studentId": {
+          "type": "string",
+          "description": "Referenced Student document ID",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "className": {
+          "type": "string",
+          "description": "Student class name",
+          "minLength": 1,
+          "maxLength": 50
+        },
+        "academicYear": {
+          "type": "string",
+          "description": "Academic year",
+          "minLength": 1,
+          "maxLength": 30
+        },
+        "semester": {
+          "type": "string",
+          "description": "Semester (Ganjil or Genap)",
+          "enum": ["Ganjil", "Genap"],
+          "minLength": 1,
+          "maxLength": 20
+        },
+        "sakit": {
+          "type": "integer",
+          "description": "Number of sick days"
+        },
+        "izin": {
+          "type": "integer",
+          "description": "Number of permitted absence days"
+        },
+        "alpa": {
+          "type": "integer",
+          "description": "Number of unexcused absence days"
+        },
+        "homeroomUid": {
+          "type": "string",
+          "description": "UID of the homeroom teacher",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "UID of the creator",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation server timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last update server timestamp"
+        }
+      },
+      "required": [
+        "studentId",
+        "className",
+        "academicYear",
+        "semester",
+        "sakit",
+        "izin",
+        "alpa",
+        "homeroomUid",
+        "ownerId",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "ReportNoteRecord": {
+      "title": "ReportNoteRecord",
+      "description": "Represents student behavior predicate and homeroom teacher notes for a semester.",
+      "type": "object",
+      "properties": {
+        "studentId": {
+          "type": "string",
+          "description": "Referenced Student document ID",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "className": {
+          "type": "string",
+          "description": "Student class name",
+          "minLength": 1,
+          "maxLength": 50
+        },
+        "academicYear": {
+          "type": "string",
+          "description": "Academic year",
+          "minLength": 1,
+          "maxLength": 30
+        },
+        "semester": {
+          "type": "string",
+          "description": "Semester (Ganjil or Genap)",
+          "enum": ["Ganjil", "Genap"],
+          "minLength": 1,
+          "maxLength": 20
+        },
+        "behaviorPredicate": {
+          "type": "string",
+          "description": "Student behavior predicate",
+          "enum": ["Sangat Baik", "Baik", "Cukup", "Perlu Pembinaan"],
+          "minLength": 1,
+          "maxLength": 30
+        },
+        "behaviorNote": {
+          "type": "string",
+          "description": "Narrative note on student behavior",
+          "minLength": 0,
+          "maxLength": 500
+        },
+        "homeroomNote": {
+          "type": "string",
+          "description": "Homeroom teacher motivational note",
+          "minLength": 0,
+          "maxLength": 500
+        },
+        "homeroomUid": {
+          "type": "string",
+          "description": "UID of the homeroom teacher",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "UID of the creator",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation server timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last update server timestamp"
+        }
+      },
+      "required": [
+        "studentId",
+        "className",
+        "academicYear",
+        "semester",
+        "behaviorPredicate",
+        "behaviorNote",
+        "homeroomNote",
+        "homeroomUid",
         "ownerId",
         "createdAt",
         "updatedAt"
@@ -482,6 +926,22 @@
     }
   },
   "firestore": {
+    "/admins/{adminId}": {
+      "schema": { "$ref": "#/entities/AdminRecord" },
+      "description": "Trusted administrator UIDs."
+    },
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserAccount" },
+      "description": "Stores teacher, homeroom teacher, and admin user accounts."
+    },
+    "/teacherAssignments/{assignmentId}": {
+      "schema": { "$ref": "#/entities/TeacherAssignment" },
+      "description": "Stores teacher-to-subject-and-class assignments."
+    },
+    "/academicYears/{yearId}": {
+      "schema": { "$ref": "#/entities/AcademicYear" },
+      "description": "Stores school academic year and semester records."
+    },
     "/classes/{classId}": {
       "schema": { "$ref": "#/entities/SchoolClass" },
       "description": "Stores school classes and homeroom teacher assignments."
@@ -498,9 +958,21 @@
       "schema": { "$ref": "#/entities/GradeRecord" },
       "description": "Stores ASTS student grades per subject and semester."
     },
+    "/attendance/{attendanceId}": {
+      "schema": { "$ref": "#/entities/AttendanceRecord" },
+      "description": "Stores student attendance records per semester."
+    },
+    "/reportNotes/{noteId}": {
+      "schema": { "$ref": "#/entities/ReportNoteRecord" },
+      "description": "Stores student behavior and homeroom report notes per semester."
+    },
     "/settings/{settingId}": {
       "schema": { "$ref": "#/entities/SchoolSetting" },
       "description": "Stores school identity and report card print settings."
+    },
+    "/schoolSettings/{settingId}": {
+      "schema": { "$ref": "#/entities/SchoolSetting" },
+      "description": "Centralized school identity and report card configuration."
     }
   }
 }

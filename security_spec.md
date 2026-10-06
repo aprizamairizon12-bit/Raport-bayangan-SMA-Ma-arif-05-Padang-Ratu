@@ -1,24 +1,26 @@
-# Security Specification — Raport Bayangan SMA Ma'arif 05 Padang Ratu
+# Security Specification — Sistem Raport Bayangan Multi-Guru SMA Ma'arif 05 Padang Ratu
 
-## 1. Data Invariants
-1. **Authentication & Verification Invariant**: Every read and write operation requires a signed-in user with a verified email (`request.auth != null && request.auth.token.email_verified == true`).
-2. **Ownership Invariant**: Every document in `/classes`, `/students`, `/subjects`, `/grades`, and `/settings` must carry an `ownerId` matching `request.auth.uid` on creation, and `ownerId` is immutable on update (`incoming().ownerId == existing().ownerId`).
-3. **Path ID Invariant**: Every single-document operation (`get`, `create`, `update`, `delete`) must validate its path variable ID using `isValidId(id)` (`^[a-zA-Z0-9_\-]+$`, length 1..128). `list` operations do not call `isValidId()` and must enforce `resource.data.ownerId == request.auth.uid`.
-4. **Relational Integrity Invariant**: A `GradeRecord` in `/grades/{gradeId}` cannot be created or updated unless both `/students/$(incoming().studentId)` and `/subjects/$(incoming().subjectId)` exist and belong to `request.auth.uid`.
-5. **Temporal Integrity Invariant**: `createdAt` and `updatedAt` must equal `request.time` on creation. On update, `createdAt` is immutable (`incoming().createdAt == existing().createdAt`) and `updatedAt == request.time`.
-6. **Strict Schema & Bounds Invariant**: All strings enforce explicit `.size()` bounds matching `firebase-blueprint.json`, numeric values (`astsScore`, `sakit`, `izin`, `alpa`, `fontSize`, `marginMm`) enforce numeric range bounds, and `hasAll`/`hasOnly` prevent shadow fields.
+## 1. Data Invariants & Role-Based Access Control (RBAC)
+1. **Authentication & Email Verification Invariant**: Every read and write operation requires a signed-in user with a verified email (`request.auth != null && request.auth.token.email_verified == true`).
+2. **Three-Tier Role Architecture**:
+   - **Admin Sekolah (`isAdmin()`)**: Verified via bootstrapped admin email (`aprizamairizon12@gmail.com` with `email_verified == true`) or existence of `/admins/$(request.auth.uid)`. Admins can manage `/admins`, `/users`, `/teacherAssignments`, `/academicYears`, `/classes`, `/students`, `/subjects`, `/grades`, and `/settings`.
+   - **Guru Mata Pelajaran (`guru_mapel`)**: Can read their assigned records and create/update `/grades/{gradeId}` strictly for their own `teacherUid == request.auth.uid` when a valid `/teacherAssignments/$(incoming().assignmentId)` exists and belongs to `request.auth.uid` for the matching `subjectId` and `className`. Cannot modify other teachers' grades, delete master school data, or change administrator settings.
+   - **Wali Kelas (`wali_kelas`)**: Can read students in their assigned class (`homeroomUid == request.auth.uid`) and update `/students/{studentId}` strictly for attendance (`sakit`, `izin`, `alpa`), behavior (`behaviorPredicate`, `behaviorNote`), and `homeroomNote`. Cannot alter student NISN/class, delete students, or modify subject grades without a subject assignment.
+3. **Anti-Privilege-Escalation Invariant**: Users can never self-assign `role: 'admin'` in `/users/{userId}` or write to `/admins/{adminId}` unless they are already `isAdmin()`.
+4. **Relational Integrity Invariant**: A `GradeRecord` in `/grades/{gradeId}` cannot be created or updated unless `/students/$(incoming().studentId)`, `/subjects/$(incoming().subjectId)`, and `/teacherAssignments/$(incoming().assignmentId)` exist and match the teacher's assignment or admin authority.
+5. **Temporal & Schema Integrity Invariant**: `createdAt` and `updatedAt` must equal `request.time` on creation; `createdAt`, `ownerId`, `studentId`, and `subjectId` are immutable on update. All strings enforce `.size()` limits and numeric fields enforce range bounds (`0..100` for `astsScore`, `0..365` for attendance).
 
 ## 2. The "Dirty Dozen" Payloads
 
-1. **Identity Spoofing on Create**: Creating a `/students/std_1` document where `ownerId: "victim_uid"` while authenticated as `"attacker_uid"`.
-2. **Unverified Email Spoof**: Performing a write to `/classes/cls_1` with `email_verified: false`.
-3. **Shadow Field Injection on Create**: Creating a `/subjects/sub_1` document with an extra undeclared field `isAdminBypass: true`.
-4. **Shadow Field Injection on Update**: Updating `/students/std_1` with an extra field `hacked: "yes"` outside the `affectedKeys().hasOnly(...)` allowlist.
-5. **Owner Mutation on Update**: Updating `/classes/cls_1` to change `ownerId` from `"user_1"` to `"user_2"`.
-6. **CreatedAt Tampering on Update**: Updating `/subjects/sub_1` while modifying `createdAt` to `request.time`.
-7. **Forged Client Timestamp on Create**: Creating `/classes/cls_1` with a past or future `createdAt` timestamp not equal to `request.time`.
-8. **ID Poisoning Attack**: Creating a document at `/students/invalid$id!with*spaces` that violates `^[a-zA-Z0-9_\-]+$`.
-9. **Denial-of-Wallet Oversized String**: Updating `homeroomNote` on `/students/std_1` with a 5,000-character string (exceeding `maxLength: 500`).
-10. **Out-of-Bounds Grade Value**: Creating `/grades/grd_1` with `astsScore: 150` (exceeding `0..100`).
-11. **Orphaned Relational Write**: Creating `/grades/grd_1` referencing a non-existent `studentId: "missing_student"` or a student owned by another user.
-12. **Unauthorized Cross-Tenant List Scraping**: Executing a `list` query on `/students` or `/settings` without filtering `resource.data.ownerId == request.auth.uid`.
+1. **Self-Assigned Admin Escalation**: A non-admin user attempting to create `/users/attacker_uid` with `role: "admin"`.
+2. **Unverified Admin Email Spoof**: A request with `email: "aprizamairizon12@gmail.com"` but `email_verified: false` attempting to write to `/settings/main_settings`.
+3. **Cross-Teacher Grade Tampering**: Teacher A (`uid: "teacher_a"`) attempting to update a `/grades/grd_1` document owned by Teacher B (`teacherUid: "teacher_b"`).
+4. **Unassigned Subject Grade Write**: Teacher A attempting to create a grade in `/grades/grd_2` referencing an `assignmentId` that does not belong to Teacher A.
+5. **Wali Kelas Modifying Student Identity**: A homeroom teacher (`homeroomUid == request.auth.uid`) attempting to change `nisn` or `className` on `/students/std_1` instead of only attendance/behavior/notes.
+6. **Wali Kelas Deleting Master Student Record**: A homeroom teacher attempting to `delete` `/students/std_1`.
+7. **Shadow Field Injection on Create**: Creating `/subjects/sub_1` with an undeclared field `bypassSecurity: true`.
+8. **Shadow Field Injection on Update**: Updating `/students/std_1` with an undeclared field `extraField: 123`.
+9. **Immutable Field Mutation on Update**: Updating `/grades/grd_1` to change `studentId` or `createdAt`.
+10. **ID Poisoning Attack**: Creating `/classes/invalid$id!spaces` violating `^[a-zA-Z0-9_\-]+$`.
+11. **Denial-of-Wallet Oversized String**: Updating `homeroomNote` on `/students/std_1` with a 5,000-character string (exceeding `maxLength: 500`).
+12. **Out-of-Bounds Grade Value**: Creating `/grades/grd_1` with `astsScore: 105` or `-5` (outside `0..100`).

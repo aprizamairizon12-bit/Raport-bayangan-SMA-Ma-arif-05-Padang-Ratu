@@ -10,12 +10,15 @@ import {
   AlertCircle,
   X,
   Sparkles,
+  Lock,
 } from 'lucide-react';
 import {
   AppDatabaseState,
   Student,
   SemesterType,
   BehaviorPredicate,
+  UserAccount,
+  ImportReportSummary,
 } from '../types';
 import {
   downloadExcelTemplate,
@@ -24,10 +27,11 @@ import {
 } from '../utils/excelUtils';
 
 /* ============================================================================
- * 1. MENU UTAMA INPUT NILAI ASTS
+ * 1. MENU UTAMA INPUT NILAI ASTS (DENGAN VALIDASI PENUGASAN GURU MAPEL)
  * ========================================================================== */
 interface InputGradesViewProps {
   dbState: AppDatabaseState;
+  currentUser: UserAccount;
   selectedClass: string;
   setSelectedClass: (cls: string) => void;
   activeTeacherName: string;
@@ -54,6 +58,7 @@ interface InputGradesViewProps {
 
 export const InputGradesView: React.FC<InputGradesViewProps> = ({
   dbState,
+  currentUser,
   selectedClass,
   setSelectedClass,
   onUpsertGrade,
@@ -61,11 +66,38 @@ export const InputGradesView: React.FC<InputGradesViewProps> = ({
   notify,
 }) => {
   const { classes, students, subjects, grades, settings } = dbState;
-  const activeClassName =
-    selectedClass === 'Semua Kelas' ? classes[0]?.name || 'X 1' : selectedClass;
+  const isAdmin = currentUser.role === 'admin';
+
+  // Filter classes & subjects based on teacher's assignment unless Admin
+  const allowedClasses = useMemo(() => {
+    if (isAdmin) return classes;
+    const assignedSet = new Set(currentUser.assignedClasses);
+    if (currentUser.homeroomClass) assignedSet.add(currentUser.homeroomClass);
+    const filtered = classes.filter((c) => assignedSet.has(c.name));
+    return filtered.length > 0 ? filtered : classes;
+  }, [classes, currentUser, isAdmin]);
+
+  const allowedSubjects = useMemo(() => {
+    if (isAdmin) return subjects;
+    const subSet = new Set(currentUser.assignedSubjectIds);
+    const filtered = subjects.filter(
+      (s) => subSet.has(s.id) || s.teacherUid === currentUser.uid
+    );
+    return filtered.length > 0 ? filtered : subjects;
+  }, [subjects, currentUser, isAdmin]);
+
+  const activeClassName = useMemo(() => {
+    if (
+      selectedClass !== 'Semua Kelas' &&
+      allowedClasses.some((c) => c.name === selectedClass)
+    ) {
+      return selectedClass;
+    }
+    return allowedClasses[0]?.name || classes[0]?.name || 'X 1';
+  }, [selectedClass, allowedClasses, classes]);
 
   const [selectedSubjectId, setSelectedSubjectId] = useState<string>(
-    subjects[0]?.id || ''
+    allowedSubjects[0]?.id || subjects[0]?.id || ''
   );
   const [semesterFilter, setSemesterFilter] = useState<SemesterType>(settings.semester);
   const [academicYearFilter, setAcademicYearFilter] = useState<string>(settings.academicYear);
@@ -73,13 +105,28 @@ export const InputGradesView: React.FC<InputGradesViewProps> = ({
   const [showPasteModal, setShowPasteModal] = useState<boolean>(false);
   const [pasteText, setPasteText] = useState<string>('');
   const [isReadOnlyMode, setIsReadOnlyMode] = useState<boolean>(false);
+  const [importReport, setImportReport] = useState<ImportReportSummary | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const activeSubject = useMemo(
-    () => subjects.find((s) => s.id === selectedSubjectId) || subjects[0],
-    [subjects, selectedSubjectId]
-  );
+  const activeSubject = useMemo(() => {
+    const found = allowedSubjects.find((s) => s.id === selectedSubjectId);
+    return found || allowedSubjects[0] || subjects[0];
+  }, [allowedSubjects, subjects, selectedSubjectId]);
+
+  // Verify if current user is authorized to edit this subject in this class
+  const canEditSelectedSubject = useMemo(() => {
+    if (isAdmin) return true;
+    if (!activeSubject) return false;
+    const hasSubject =
+      currentUser.assignedSubjectIds.includes(activeSubject.id) ||
+      activeSubject.teacherUid === currentUser.uid ||
+      activeSubject.teacherName.toLowerCase() === currentUser.name.toLowerCase();
+    const hasClass =
+      currentUser.assignedClasses.length === 0 ||
+      currentUser.assignedClasses.includes(activeClassName);
+    return hasSubject && hasClass;
+  }, [isAdmin, activeSubject, currentUser, activeClassName]);
 
   const classStudents = useMemo(
     () => students.filter((s) => s.className === activeClassName),
@@ -113,6 +160,12 @@ export const InputGradesView: React.FC<InputGradesViewProps> = ({
 
   const handleScoreChange = (studentId: string, rawVal: string) => {
     if (!activeSubject) return;
+    if (!canEditSelectedSubject) {
+      notify(
+        `Akses Ditolak: Anda tidak ditugaskan mengampu mata pelajaran ${activeSubject.name} di Kelas ${activeClassName}.`
+      );
+      return;
+    }
     const trimmed = rawVal.trim();
     if (trimmed === '') {
       onUpsertGrade(
@@ -142,7 +195,10 @@ export const InputGradesView: React.FC<InputGradesViewProps> = ({
   };
 
   const handleClearClassGrades = () => {
-    if (!activeSubject) return;
+    if (!activeSubject || !canEditSelectedSubject) {
+      notify('Akses Ditolak: Anda tidak memiliki izin menghapus nilai mata pelajaran ini.');
+      return;
+    }
     const entries = classStudents.map((st) => ({
       studentId: st.id,
       subjectId: activeSubject.id,
@@ -158,7 +214,7 @@ export const InputGradesView: React.FC<InputGradesViewProps> = ({
   };
 
   const handlePasteGradesApply = () => {
-    if (!activeSubject) return;
+    if (!activeSubject || !canEditSelectedSubject) return;
     const lines = pasteText
       .split(/\r?\n/)
       .map((l) => l.trim())
@@ -177,14 +233,13 @@ export const InputGradesView: React.FC<InputGradesViewProps> = ({
       academicYear: string;
       score: number | null;
     }[] = [];
+    const errors: string[] = [];
 
     lines.forEach((line, idx) => {
-      // Support either single column of numbers OR tab-separated (NISN/Name + Score)
       const parts = line.split('\t').map((p) => p.trim());
       const lastPart = parts[parts.length - 1];
       const num = Number(lastPart.replace(',', '.'));
       if (!Number.isNaN(num) && num >= 0 && num <= 100) {
-        // Match by NISN if first column matches a student NISN, otherwise by row order
         const matchedByNisn = classStudents.find((s) => s.nisn === parts[0]);
         const targetStudent = matchedByNisn || classStudents[idx];
         if (targetStudent) {
@@ -196,7 +251,11 @@ export const InputGradesView: React.FC<InputGradesViewProps> = ({
             academicYear: academicYearFilter,
             score: Math.round(num),
           });
+        } else {
+          errors.push(`Baris ${idx + 1}: Siswa tidak ditemukan pada urutan kelas.`);
         }
+      } else {
+        errors.push(`Baris ${idx + 1}: Nilai "${lastPart}" di luar rentang valid 0–100.`);
       }
     });
 
@@ -206,6 +265,13 @@ export const InputGradesView: React.FC<InputGradesViewProps> = ({
     }
 
     onBulkUpsertGrades(entries);
+    setImportReport({
+      moduleName: `Paste Nilai ASTS (${activeSubject.name} — Kelas ${activeClassName})`,
+      successCount: entries.length,
+      updatedCount: 0,
+      failedCount: errors.length,
+      errors,
+    });
     setShowPasteModal(false);
     setPasteText('');
     notify(`${entries.length} nilai ASTS berhasil ditempel dan disimpan ke Cloud!`);
@@ -214,6 +280,11 @@ export const InputGradesView: React.FC<InputGradesViewProps> = ({
   const handleImportExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !activeSubject) return;
+    if (!canEditSelectedSubject) {
+      notify('Akses Ditolak: Anda tidak berwenang mengimpor nilai untuk mata pelajaran ini.');
+      e.target.value = '';
+      return;
+    }
     try {
       const rows = await parseExcelFile(file);
       const entries: {
@@ -224,6 +295,7 @@ export const InputGradesView: React.FC<InputGradesViewProps> = ({
         academicYear: string;
         score: number | null;
       }[] = [];
+      const errors: string[] = [];
 
       rows.forEach((row, idx) => {
         const nisn = String(row['NISN'] ?? row['nisn'] ?? '').trim();
@@ -247,16 +319,27 @@ export const InputGradesView: React.FC<InputGradesViewProps> = ({
               academicYear: academicYearFilter,
               score: Math.round(num),
             });
+          } else {
+            errors.push(`Baris ${idx + 1} (${nisn || name}): Siswa tidak ditemukan di Kelas ${activeClassName}.`);
           }
+        } else {
+          errors.push(`Baris ${idx + 1}: Nilai "${rawScore}" tidak valid (wajib angka 0–100).`);
         }
       });
 
       if (entries.length > 0) {
         onBulkUpsertGrades(entries);
-        notify(`${entries.length} nilai ASTS berhasil diimpor dari Excel.`);
-      } else {
-        notify('Tidak ada nilai valid (0–100) ditemukan pada file Excel.');
       }
+      setImportReport({
+        moduleName: `Import Excel Nilai ASTS (${activeSubject.name} — Kelas ${activeClassName})`,
+        successCount: entries.length,
+        updatedCount: 0,
+        failedCount: errors.length,
+        errors,
+      });
+      notify(
+        `Impor selesai: ${entries.length} berhasil, ${errors.length} gagal.`
+      );
     } catch {
       notify('Gagal membaca file Excel Nilai ASTS.');
     }
@@ -273,18 +356,22 @@ export const InputGradesView: React.FC<InputGradesViewProps> = ({
               Input Nilai ASTS (Asesmen Sumatif Tengah Semester)
             </h2>
             <p className="text-sm text-slate-600">
-              Nilai tersimpan otomatis ke database cloud (rentang validasi 0–100). Mendukung Paste langsung dari Excel.
+              {isAdmin
+                ? 'Mode Admin Sekolah: Anda dapat mengelola nilai seluruh kelas dan mata pelajaran.'
+                : `Mode ${
+                    currentUser.role === 'wali_kelas' ? 'Wali Kelas' : 'Guru Mapel'
+                  }: Hanya menampilkan mata pelajaran dan kelas sesuai penugasan Anda.`}
             </p>
           </div>
 
-          {/* Required Action Buttons: Simpan, Edit, Hapus, Paste Nilai, Import Excel, Download Template */}
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
+              disabled={!canEditSelectedSubject}
               onClick={() =>
                 notify('Seluruh perubahan nilai telah tersimpan di database cloud!')
               }
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-emerald-700 rounded-lg hover:bg-emerald-800 cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-emerald-700 rounded-lg hover:bg-emerald-800 disabled:opacity-40 cursor-pointer"
             >
               <Save className="w-4 h-4" />
               Simpan
@@ -292,6 +379,7 @@ export const InputGradesView: React.FC<InputGradesViewProps> = ({
 
             <button
               type="button"
+              disabled={!canEditSelectedSubject}
               onClick={() => {
                 setIsReadOnlyMode((prev) => !prev);
                 notify(
@@ -300,7 +388,7 @@ export const InputGradesView: React.FC<InputGradesViewProps> = ({
                     : 'Tabel dikunci sementara. Klik Edit untuk mengubah nilai.'
                 );
               }}
-              className={`inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-lg border cursor-pointer ${
+              className={`inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-lg border disabled:opacity-40 cursor-pointer ${
                 !isReadOnlyMode
                   ? 'bg-emerald-50 text-emerald-900 border-emerald-200'
                   : 'bg-white text-slate-700 border-slate-200'
@@ -312,8 +400,9 @@ export const InputGradesView: React.FC<InputGradesViewProps> = ({
 
             <button
               type="button"
+              disabled={!canEditSelectedSubject}
               onClick={() => setShowPasteModal(true)}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-slate-900 bg-slate-100 border border-slate-300 rounded-lg hover:bg-slate-200 cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-slate-900 bg-slate-100 border border-slate-300 rounded-lg hover:bg-slate-200 disabled:opacity-40 cursor-pointer"
             >
               <ClipboardPaste className="w-4 h-4" />
               Paste Nilai
@@ -328,8 +417,9 @@ export const InputGradesView: React.FC<InputGradesViewProps> = ({
             />
             <button
               type="button"
+              disabled={!canEditSelectedSubject}
               onClick={() => fileInputRef.current?.click()}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-40 cursor-pointer"
             >
               <Upload className="w-4 h-4" />
               Import Excel
@@ -352,29 +442,31 @@ export const InputGradesView: React.FC<InputGradesViewProps> = ({
               Download Template
             </button>
 
-            <button
-              type="button"
-              onClick={handleClearClassGrades}
-              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-red-700 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 cursor-pointer"
-            >
-              <Trash2 className="w-4 h-4" />
-              Hapus
-            </button>
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={handleClearClassGrades}
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-red-700 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 cursor-pointer"
+              >
+                <Trash2 className="w-4 h-4" />
+                Hapus
+              </button>
+            )}
           </div>
         </div>
 
-        {/* 4 Required Selectors: Kelas, Mata Pelajaran, Semester, Tahun Pelajaran */}
+        {/* 4 Required Selectors */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <div>
             <label className="block text-xs font-medium text-slate-700 mb-1">
-              1. Pilih Kelas
+              1. Pilih Kelas Ditugaskan
             </label>
             <select
               value={activeClassName}
               onChange={(e) => setSelectedClass(e.target.value)}
               className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-600"
             >
-              {classes.map((c) => (
+              {allowedClasses.map((c) => (
                 <option key={c.id} value={c.name}>
                   Kelas {c.name}
                 </option>
@@ -384,14 +476,14 @@ export const InputGradesView: React.FC<InputGradesViewProps> = ({
 
           <div>
             <label className="block text-xs font-medium text-slate-700 mb-1">
-              2. Pilih Mata Pelajaran
+              2. Pilih Mata Pelajaran Diampu
             </label>
             <select
               value={activeSubject?.id || ''}
               onChange={(e) => setSelectedSubjectId(e.target.value)}
               className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-600"
             >
-              {subjects.map((sub) => (
+              {allowedSubjects.map((sub) => (
                 <option key={sub.id} value={sub.id}>
                   {sub.code} — {sub.name}
                 </option>
@@ -446,6 +538,15 @@ export const InputGradesView: React.FC<InputGradesViewProps> = ({
                 {emptyCount} Siswa
               </strong>
             </span>
+            {!canEditSelectedSubject && (
+              <>
+                <span>·</span>
+                <span className="inline-flex items-center gap-1 text-red-700 font-semibold">
+                  <Lock className="w-3.5 h-3.5" />
+                  Hanya Baca (Bukan Mapel Penugasan Anda)
+                </span>
+              </>
+            )}
           </div>
 
           <label className="inline-flex items-center gap-2 font-medium text-slate-700 cursor-pointer">
@@ -459,6 +560,40 @@ export const InputGradesView: React.FC<InputGradesViewProps> = ({
           </label>
         </div>
       </div>
+
+      {/* Validation Report Banner after Import/Paste */}
+      {importReport && (
+        <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="text-xs font-bold text-slate-900">
+              Laporan Hasil Validasi Impor — {importReport.moduleName}
+            </div>
+            <button
+              type="button"
+              onClick={() => setImportReport(null)}
+              className="text-slate-400 hover:text-slate-600 cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="flex items-center gap-4 text-xs">
+            <span className="text-emerald-700 font-semibold">
+              Berhasil Disimpan: {importReport.successCount} baris
+            </span>
+            <span>·</span>
+            <span className="text-red-700 font-semibold">
+              Gagal / Ditolak Validasi: {importReport.failedCount} baris
+            </span>
+          </div>
+          {importReport.errors.length > 0 && (
+            <ul className="text-xs text-red-700 bg-red-50 p-2.5 rounded-lg space-y-1 max-h-28 overflow-y-auto font-mono">
+              {importReport.errors.map((err, i) => (
+                <li key={i}>• {err}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       {/* Paste From Excel Modal */}
       {showPasteModal && (
@@ -479,7 +614,7 @@ export const InputGradesView: React.FC<InputGradesViewProps> = ({
             <p className="text-xs text-slate-600 leading-relaxed">
               Salin (Copy) kolom angka nilai dari Microsoft Excel untuk{' '}
               <strong>Kelas {activeClassName}</strong> pada mata pelajaran{' '}
-              <strong>{activeSubject?.name}</strong>, lalu tempel (Paste) pada kotak di bawah ini. Urutan baris otomatis disesuaikan dengan daftar siswa ({classStudents.length} siswa).
+              <strong>{activeSubject?.name}</strong>, lalu tempel (Paste) pada kotak di bawah ini.
             </p>
             <textarea
               rows={8}
@@ -508,7 +643,7 @@ export const InputGradesView: React.FC<InputGradesViewProps> = ({
         </div>
       )}
 
-      {/* Grades Table: | No | NISN | Nama Siswa | Nilai ASTS | Status | */}
+      {/* Grades Table */}
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
@@ -518,7 +653,7 @@ export const InputGradesView: React.FC<InputGradesViewProps> = ({
                 <th className="py-3 px-4 w-36">NISN</th>
                 <th className="py-3 px-4">Nama Siswa</th>
                 <th className="py-3 px-4 w-44 text-center">Nilai ASTS (0–100)</th>
-                <th className="py-3 px-4 w-48">Status</th>
+                <th className="py-3 px-4 w-56">Status Kelengkapan</th>
                 <th className="py-3 px-4 w-24 text-right">Aksi</th>
               </tr>
             </thead>
@@ -553,13 +688,13 @@ export const InputGradesView: React.FC<InputGradesViewProps> = ({
                           type="number"
                           min={0}
                           max={100}
-                          disabled={isReadOnlyMode}
+                          disabled={isReadOnlyMode || !canEditSelectedSubject}
                           value={row.score !== null ? row.score : ''}
                           onChange={(e) =>
                             handleScoreChange(row.student.id, e.target.value)
                           }
                           placeholder="0 - 100"
-                          className={`w-28 px-3 py-1.5 text-center font-mono tabular-nums text-sm font-bold rounded-lg border transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-600 ${
+                          className={`w-28 px-3 py-1.5 text-center font-mono tabular-nums text-sm font-bold rounded-lg border transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-600 disabled:bg-slate-100 disabled:text-slate-500 ${
                             isFilled
                               ? 'bg-white border-slate-300 text-slate-900'
                               : 'bg-amber-50/60 border-amber-300 text-amber-900 placeholder:text-amber-400'
@@ -570,7 +705,7 @@ export const InputGradesView: React.FC<InputGradesViewProps> = ({
                         {isFilled ? (
                           <span className="inline-flex items-center gap-1.5 text-emerald-700 font-medium">
                             <CheckCircle2 className="w-4 h-4 shrink-0" />
-                            <span>Sudah Diinput</span>
+                            <span>Sudah Diinput ({row.updatedBy})</span>
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1.5 text-amber-700 font-medium">
@@ -580,12 +715,12 @@ export const InputGradesView: React.FC<InputGradesViewProps> = ({
                         )}
                       </td>
                       <td className="py-2.5 px-4 text-right">
-                        {isFilled && (
+                        {isFilled && canEditSelectedSubject && (
                           <button
                             type="button"
                             onClick={() => handleScoreChange(row.student.id, '')}
                             className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md cursor-pointer"
-                            title="Hapus Nilai Siswa Ini"
+                            title="Kosongkan Nilai Siswa Ini"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -609,6 +744,7 @@ export const InputGradesView: React.FC<InputGradesViewProps> = ({
 interface StudentAttributesViewProps {
   mode: 'attendance' | 'behavior' | 'homeroom_notes';
   dbState: AppDatabaseState;
+  currentUser: UserAccount;
   selectedClass: string;
   setSelectedClass: (cls: string) => void;
   onUpdateStudent: (student: Student) => void;
@@ -619,6 +755,7 @@ interface StudentAttributesViewProps {
 export const StudentAttributesView: React.FC<StudentAttributesViewProps> = ({
   mode,
   dbState,
+  currentUser,
   selectedClass,
   setSelectedClass,
   onUpdateStudent,
@@ -626,8 +763,32 @@ export const StudentAttributesView: React.FC<StudentAttributesViewProps> = ({
   notify,
 }) => {
   const { classes, students } = dbState;
-  const activeClassName =
-    selectedClass === 'Semua Kelas' ? classes[0]?.name || 'X 1' : selectedClass;
+  const isAdmin = currentUser.role === 'admin';
+
+  const allowedClasses = useMemo(() => {
+    if (isAdmin) return classes;
+    if (currentUser.homeroomClass) {
+      const found = classes.filter((c) => c.name === currentUser.homeroomClass);
+      if (found.length > 0) return found;
+    }
+    return classes;
+  }, [classes, currentUser, isAdmin]);
+
+  const activeClassName = useMemo(() => {
+    if (
+      selectedClass !== 'Semua Kelas' &&
+      allowedClasses.some((c) => c.name === selectedClass)
+    ) {
+      return selectedClass;
+    }
+    return allowedClasses[0]?.name || classes[0]?.name || 'X 1';
+  }, [selectedClass, allowedClasses, classes]);
+
+  const canEditAttributes =
+    isAdmin ||
+    ((currentUser.role === 'wali_kelas' || currentUser.role === 'homeroom') &&
+      currentUser.homeroomClass === activeClassName) ||
+    currentUser.homeroomClass === activeClassName;
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -639,6 +800,11 @@ export const StudentAttributesView: React.FC<StudentAttributesViewProps> = ({
   const handleImportExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (!canEditAttributes) {
+      notify('Akses Ditolak: Hanya Wali Kelas terkait atau Admin yang dapat mengubah data ini.');
+      e.target.value = '';
+      return;
+    }
     try {
       const rows = await parseExcelFile(file);
       const updatedMap = new Map<string, Student>();
@@ -683,6 +849,7 @@ export const StudentAttributesView: React.FC<StudentAttributesViewProps> = ({
   };
 
   const handleResetClassData = () => {
+    if (!canEditAttributes) return;
     const resetList = classStudents.map((st) => {
       if (mode === 'attendance') {
         return { ...st, sakit: 0, izin: 0, alpa: 0 };
@@ -697,6 +864,7 @@ export const StudentAttributesView: React.FC<StudentAttributesViewProps> = ({
   };
 
   const applyDefaultNotesToEmpty = () => {
+    if (!canEditAttributes) return;
     const updated = classStudents.map((st) => {
       if (mode === 'behavior') {
         return {
@@ -728,12 +896,9 @@ export const StudentAttributesView: React.FC<StudentAttributesViewProps> = ({
               {mode === 'homeroom_notes' && 'Input Catatan Evaluasi Wali Kelas'}
             </h2>
             <p className="text-sm text-slate-600">
-              {mode === 'attendance' &&
-                'Masukkan jumlah hari ketidakhadiran siswa (Sakit, Izin, Alpa) untuk ditampilkan pada Raport Bayangan.'}
-              {mode === 'behavior' &&
-                'Pilih predikat perilaku (Sangat Baik, Baik, Cukup, Perlu Pembinaan) beserta catatan perilaku.'}
-              {mode === 'homeroom_notes' &&
-                'Tuliskan pesan motivasi dan evaluasi perkembangan belajar dari Wali Kelas untuk setiap siswa.'}
+              {canEditAttributes
+                ? `Wali Kelas / Admin Aktif: Anda memiliki akses penuh mengelola data Kelas ${activeClassName}.`
+                : `Mode Hanya Baca: Hanya Wali Kelas ${activeClassName} atau Admin Sekolah yang dapat mengubah data ini.`}
             </p>
           </div>
 
@@ -741,8 +906,9 @@ export const StudentAttributesView: React.FC<StudentAttributesViewProps> = ({
             {(mode === 'behavior' || mode === 'homeroom_notes') && (
               <button
                 type="button"
+                disabled={!canEditAttributes}
                 onClick={applyDefaultNotesToEmpty}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 disabled:opacity-40 cursor-pointer"
               >
                 <Sparkles className="w-4 h-4" />
                 Isi Otomatis Catatan Kosong
@@ -758,8 +924,9 @@ export const StudentAttributesView: React.FC<StudentAttributesViewProps> = ({
             />
             <button
               type="button"
+              disabled={!canEditAttributes}
               onClick={() => fileInputRef.current?.click()}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-slate-800 bg-slate-100 border border-slate-300 rounded-lg hover:bg-slate-200 cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-slate-800 bg-slate-100 border border-slate-300 rounded-lg hover:bg-slate-200 disabled:opacity-40 cursor-pointer"
             >
               <Upload className="w-4 h-4" />
               Import Excel
@@ -780,14 +947,16 @@ export const StudentAttributesView: React.FC<StudentAttributesViewProps> = ({
               Download Template
             </button>
 
-            <button
-              type="button"
-              onClick={handleResetClassData}
-              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-red-700 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 cursor-pointer"
-            >
-              <Trash2 className="w-4 h-4" />
-              Hapus / Reset
-            </button>
+            {canEditAttributes && (
+              <button
+                type="button"
+                onClick={handleResetClassData}
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-red-700 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 cursor-pointer"
+              >
+                <Trash2 className="w-4 h-4" />
+                Hapus / Reset
+              </button>
+            )}
           </div>
         </div>
 
@@ -798,7 +967,7 @@ export const StudentAttributesView: React.FC<StudentAttributesViewProps> = ({
             onChange={(e) => setSelectedClass(e.target.value)}
             className="px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-600"
           >
-            {classes.map((c) => (
+            {allowedClasses.map((c) => (
               <option key={c.id} value={c.name}>
                 Kelas {c.name} — Wali: {c.homeroomTeacherName}
               </option>
@@ -865,6 +1034,7 @@ export const StudentAttributesView: React.FC<StudentAttributesViewProps> = ({
                             type="number"
                             min={0}
                             max={365}
+                            disabled={!canEditAttributes}
                             value={st.sakit}
                             onChange={(e) =>
                               onUpdateStudent({
@@ -872,7 +1042,7 @@ export const StudentAttributesView: React.FC<StudentAttributesViewProps> = ({
                                 sakit: Math.max(0, Number(e.target.value) || 0),
                               })
                             }
-                            className="w-20 px-2 py-1.5 text-center font-mono tabular-nums text-sm border border-slate-300 rounded-lg"
+                            className="w-20 px-2 py-1.5 text-center font-mono tabular-nums text-sm border border-slate-300 rounded-lg disabled:bg-slate-100"
                           />
                         </td>
                         <td className="py-2.5 px-4 text-center">
@@ -880,6 +1050,7 @@ export const StudentAttributesView: React.FC<StudentAttributesViewProps> = ({
                             type="number"
                             min={0}
                             max={365}
+                            disabled={!canEditAttributes}
                             value={st.izin}
                             onChange={(e) =>
                               onUpdateStudent({
@@ -887,7 +1058,7 @@ export const StudentAttributesView: React.FC<StudentAttributesViewProps> = ({
                                 izin: Math.max(0, Number(e.target.value) || 0),
                               })
                             }
-                            className="w-20 px-2 py-1.5 text-center font-mono tabular-nums text-sm border border-slate-300 rounded-lg"
+                            className="w-20 px-2 py-1.5 text-center font-mono tabular-nums text-sm border border-slate-300 rounded-lg disabled:bg-slate-100"
                           />
                         </td>
                         <td className="py-2.5 px-4 text-center">
@@ -895,6 +1066,7 @@ export const StudentAttributesView: React.FC<StudentAttributesViewProps> = ({
                             type="number"
                             min={0}
                             max={365}
+                            disabled={!canEditAttributes}
                             value={st.alpa}
                             onChange={(e) =>
                               onUpdateStudent({
@@ -902,7 +1074,7 @@ export const StudentAttributesView: React.FC<StudentAttributesViewProps> = ({
                                 alpa: Math.max(0, Number(e.target.value) || 0),
                               })
                             }
-                            className="w-20 px-2 py-1.5 text-center font-mono tabular-nums text-sm border border-slate-300 rounded-lg"
+                            className="w-20 px-2 py-1.5 text-center font-mono tabular-nums text-sm border border-slate-300 rounded-lg disabled:bg-slate-100"
                           />
                         </td>
                         <td className="py-3 px-4 text-center font-mono tabular-nums text-xs font-bold text-slate-700">
@@ -915,6 +1087,7 @@ export const StudentAttributesView: React.FC<StudentAttributesViewProps> = ({
                       <>
                         <td className="py-2.5 px-4">
                           <select
+                            disabled={!canEditAttributes}
                             value={st.behaviorPredicate}
                             onChange={(e) =>
                               onUpdateStudent({
@@ -923,7 +1096,7 @@ export const StudentAttributesView: React.FC<StudentAttributesViewProps> = ({
                                   .value as BehaviorPredicate,
                               })
                             }
-                            className="w-full px-2.5 py-1.5 text-xs font-semibold border border-slate-300 rounded-lg bg-white"
+                            className="w-full px-2.5 py-1.5 text-xs font-semibold border border-slate-300 rounded-lg bg-white disabled:bg-slate-100"
                           >
                             <option value="Sangat Baik">Sangat Baik</option>
                             <option value="Baik">Baik</option>
@@ -934,6 +1107,7 @@ export const StudentAttributesView: React.FC<StudentAttributesViewProps> = ({
                         <td className="py-2.5 px-4">
                           <input
                             type="text"
+                            disabled={!canEditAttributes}
                             value={st.behaviorNote}
                             onChange={(e) =>
                               onUpdateStudent({
@@ -942,7 +1116,7 @@ export const StudentAttributesView: React.FC<StudentAttributesViewProps> = ({
                               })
                             }
                             placeholder="Contoh: Menunjukkan sikap disiplin dan aktif mengikuti kegiatan pembelajaran."
-                            className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg"
+                            className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg disabled:bg-slate-100"
                           />
                         </td>
                       </>
@@ -952,6 +1126,7 @@ export const StudentAttributesView: React.FC<StudentAttributesViewProps> = ({
                       <td className="py-2.5 px-4">
                         <input
                           type="text"
+                          disabled={!canEditAttributes}
                           value={st.homeroomNote}
                           onChange={(e) =>
                             onUpdateStudent({
@@ -960,7 +1135,7 @@ export const StudentAttributesView: React.FC<StudentAttributesViewProps> = ({
                             })
                           }
                           placeholder="Contoh: Pertahankan semangat belajar dan tingkatkan kedisiplinan dalam mengikuti pembelajaran."
-                          className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg"
+                          className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg disabled:bg-slate-100"
                         />
                       </td>
                     )}

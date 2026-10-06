@@ -63,6 +63,12 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
   const [formClass, setFormClass] = useState(
     selectedClass === 'Semua Kelas' ? classes[0]?.name || 'X 1' : selectedClass
   );
+  const [importSummary, setImportSummary] = useState<{
+    added: number;
+    skippedDuplicates: number;
+    failed: number;
+    details: string[];
+  } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
