@@ -1,0 +1,506 @@
+{
+  "entities": {
+    "SchoolClass": {
+      "title": "SchoolClass",
+      "description": "Represents a class and its assigned homeroom teacher (Wali Kelas) at SMA Ma'arif 05 Padang Ratu.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Class name (e.g. X 1, XI 1, XII 1)",
+          "minLength": 1,
+          "maxLength": 50
+        },
+        "homeroomTeacherName": {
+          "type": "string",
+          "description": "Full name and title of the homeroom teacher",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "homeroomTeacherNip": {
+          "type": "string",
+          "description": "NIP or NUPTK of the homeroom teacher",
+          "minLength": 0,
+          "maxLength": 50
+        },
+        "homeroomTeacherRole": {
+          "type": "string",
+          "description": "Role or position title of the homeroom teacher",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "UID of the authenticated user who owns this record",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation server timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last update server timestamp"
+        }
+      },
+      "required": [
+        "name",
+        "homeroomTeacherName",
+        "homeroomTeacherNip",
+        "homeroomTeacherRole",
+        "ownerId",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Student": {
+      "title": "Student",
+      "description": "Represents a student with demographic, attendance, behavior, and homeroom note records.",
+      "type": "object",
+      "properties": {
+        "nisn": {
+          "type": "string",
+          "description": "Nomor Induk Siswa Nasional",
+          "minLength": 1,
+          "maxLength": 30
+        },
+        "name": {
+          "type": "string",
+          "description": "Full name of the student",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "gender": {
+          "type": "string",
+          "description": "Gender code L or P",
+          "enum": ["L", "P"],
+          "minLength": 1,
+          "maxLength": 1
+        },
+        "className": {
+          "type": "string",
+          "description": "Assigned class name",
+          "minLength": 1,
+          "maxLength": 50
+        },
+        "sakit": {
+          "type": "integer",
+          "description": "Number of sick days"
+        },
+        "izin": {
+          "type": "integer",
+          "description": "Number of permitted absence days"
+        },
+        "alpa": {
+          "type": "integer",
+          "description": "Number of unexcused absence days"
+        },
+        "behaviorPredicate": {
+          "type": "string",
+          "description": "Student behavior grade predicate",
+          "enum": ["Sangat Baik", "Baik", "Cukup", "Perlu Pembinaan"],
+          "minLength": 1,
+          "maxLength": 30
+        },
+        "behaviorNote": {
+          "type": "string",
+          "description": "Detailed narrative note on student behavior",
+          "minLength": 0,
+          "maxLength": 500
+        },
+        "homeroomNote": {
+          "type": "string",
+          "description": "Homeroom teacher motivational and evaluation note",
+          "minLength": 0,
+          "maxLength": 500
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "UID of the authenticated user who owns this record",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation server timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last update server timestamp"
+        }
+      },
+      "required": [
+        "nisn",
+        "name",
+        "gender",
+        "className",
+        "sakit",
+        "izin",
+        "alpa",
+        "behaviorPredicate",
+        "behaviorNote",
+        "homeroomNote",
+        "ownerId",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Subject": {
+      "title": "Subject",
+      "description": "Represents a school subject (Mata Pelajaran) and its Capaian Pembelajaran (CP).",
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "description": "Subject code (e.g. BIND, MAT, SOS)",
+          "minLength": 1,
+          "maxLength": 30
+        },
+        "name": {
+          "type": "string",
+          "description": "Subject full name",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "className": {
+          "type": "string",
+          "description": "Target class or level (e.g. Semua Kelas, X 1)",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "teacherName": {
+          "type": "string",
+          "description": "Assigned subject teacher name",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "isVisible": {
+          "type": "boolean",
+          "description": "Whether the subject is displayed on the report card and leger"
+        },
+        "learningOutcome": {
+          "type": "string",
+          "description": "Complete Capaian Pembelajaran (CP) text for the report card",
+          "minLength": 0,
+          "maxLength": 1000
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "UID of the authenticated user who owns this record",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation server timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last update server timestamp"
+        }
+      },
+      "required": [
+        "code",
+        "name",
+        "className",
+        "teacherName",
+        "isVisible",
+        "learningOutcome",
+        "ownerId",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "GradeRecord": {
+      "title": "GradeRecord",
+      "description": "Represents an ASTS score for a specific student and subject.",
+      "type": "object",
+      "properties": {
+        "studentId": {
+          "type": "string",
+          "description": "Referenced Student document ID",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "subjectId": {
+          "type": "string",
+          "description": "Referenced Subject document ID",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "className": {
+          "type": "string",
+          "description": "Student class name",
+          "minLength": 1,
+          "maxLength": 50
+        },
+        "semester": {
+          "type": "string",
+          "description": "Academic semester (Ganjil or Genap)",
+          "enum": ["Ganjil", "Genap"],
+          "minLength": 1,
+          "maxLength": 20
+        },
+        "academicYear": {
+          "type": "string",
+          "description": "Academic year (e.g. 2026/2027)",
+          "minLength": 1,
+          "maxLength": 30
+        },
+        "astsScore": {
+          "type": "number",
+          "description": "ASTS numeric score from 0 to 100"
+        },
+        "updatedByTeacher": {
+          "type": "string",
+          "description": "Name of teacher who recorded the score",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "UID of the authenticated user who owns this record",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation server timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last update server timestamp"
+        }
+      },
+      "required": [
+        "studentId",
+        "subjectId",
+        "className",
+        "semester",
+        "academicYear",
+        "astsScore",
+        "updatedByTeacher",
+        "ownerId",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "SchoolSetting": {
+      "title": "SchoolSetting",
+      "description": "Stores school identity and report card layout configuration.",
+      "type": "object",
+      "properties": {
+        "schoolName": {
+          "type": "string",
+          "description": "Official school name",
+          "minLength": 1,
+          "maxLength": 150
+        },
+        "npsn": {
+          "type": "string",
+          "description": "Nomor Pokok Sekolah Nasional",
+          "minLength": 1,
+          "maxLength": 30
+        },
+        "address": {
+          "type": "string",
+          "description": "Full school address",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "phone": {
+          "type": "string",
+          "description": "School contact phone number",
+          "minLength": 0,
+          "maxLength": 50
+        },
+        "email": {
+          "type": "string",
+          "description": "School official email",
+          "minLength": 0,
+          "maxLength": 100
+        },
+        "website": {
+          "type": "string",
+          "description": "School official website URL",
+          "minLength": 0,
+          "maxLength": 120
+        },
+        "principalName": {
+          "type": "string",
+          "description": "Principal full name and degree",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "principalNip": {
+          "type": "string",
+          "description": "Principal NIP or NUPTK",
+          "minLength": 0,
+          "maxLength": 50
+        },
+        "academicYear": {
+          "type": "string",
+          "description": "Active academic year",
+          "minLength": 1,
+          "maxLength": 30
+        },
+        "semester": {
+          "type": "string",
+          "description": "Active semester",
+          "enum": ["Ganjil", "Genap"],
+          "minLength": 1,
+          "maxLength": 20
+        },
+        "paperSize": {
+          "type": "string",
+          "description": "Report card paper size",
+          "enum": ["A4", "F4"],
+          "minLength": 2,
+          "maxLength": 2
+        },
+        "orientation": {
+          "type": "string",
+          "description": "Page print orientation",
+          "enum": ["Portrait", "Landscape"],
+          "minLength": 1,
+          "maxLength": 20
+        },
+        "fontFamily": {
+          "type": "string",
+          "description": "Selected print font family",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "fontSize": {
+          "type": "integer",
+          "description": "Base font size in pt (8 to 20)"
+        },
+        "themeColor": {
+          "type": "string",
+          "description": "Primary report accent color hex",
+          "minLength": 1,
+          "maxLength": 30
+        },
+        "marginMm": {
+          "type": "integer",
+          "description": "Page margin in millimeters (5 to 40)"
+        },
+        "showLogo": {
+          "type": "boolean",
+          "description": "Toggle school logo visibility on report"
+        },
+        "showCp": {
+          "type": "boolean",
+          "description": "Toggle Capaian Pembelajaran column visibility"
+        },
+        "showGrades": {
+          "type": "boolean",
+          "description": "Toggle ASTS grade column visibility"
+        },
+        "showAttendance": {
+          "type": "boolean",
+          "description": "Toggle attendance table visibility"
+        },
+        "showBehavior": {
+          "type": "boolean",
+          "description": "Toggle behavior evaluation visibility"
+        },
+        "showHomeroomNote": {
+          "type": "boolean",
+          "description": "Toggle homeroom teacher note visibility"
+        },
+        "showSignatures": {
+          "type": "boolean",
+          "description": "Toggle signature block visibility"
+        },
+        "showRanking": {
+          "type": "boolean",
+          "description": "Toggle student ranking visibility"
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "UID of the authenticated user who owns this setting",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation server timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last update server timestamp"
+        }
+      },
+      "required": [
+        "schoolName",
+        "npsn",
+        "address",
+        "phone",
+        "email",
+        "website",
+        "principalName",
+        "principalNip",
+        "academicYear",
+        "semester",
+        "paperSize",
+        "orientation",
+        "fontFamily",
+        "fontSize",
+        "themeColor",
+        "marginMm",
+        "showLogo",
+        "showCp",
+        "showGrades",
+        "showAttendance",
+        "showBehavior",
+        "showHomeroomNote",
+        "showSignatures",
+        "showRanking",
+        "ownerId",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/classes/{classId}": {
+      "schema": { "$ref": "#/entities/SchoolClass" },
+      "description": "Stores school classes and homeroom teacher assignments."
+    },
+    "/students/{studentId}": {
+      "schema": { "$ref": "#/entities/Student" },
+      "description": "Stores student records, attendance, behavior, and homeroom notes."
+    },
+    "/subjects/{subjectId}": {
+      "schema": { "$ref": "#/entities/Subject" },
+      "description": "Stores school subjects and Capaian Pembelajaran (CP)."
+    },
+    "/grades/{gradeId}": {
+      "schema": { "$ref": "#/entities/GradeRecord" },
+      "description": "Stores ASTS student grades per subject and semester."
+    },
+    "/settings/{settingId}": {
+      "schema": { "$ref": "#/entities/SchoolSetting" },
+      "description": "Stores school identity and report card print settings."
+    }
+  }
+}

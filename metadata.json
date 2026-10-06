@@ -1,0 +1,6 @@
+{
+  "name": "Raport Bayangan SMA Ma'arif 05 Padang Ratu",
+  "description": "Sistem Administrasi Akademik, Input Nilai ASTS, Leger Nilai, dan Cetak Raport Bayangan Online SMA Ma'arif 05 Padang Ratu.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
